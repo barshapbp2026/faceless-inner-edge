@@ -1,0 +1,59 @@
+name: Faceless Video Pipeline
+
+on:
+  schedule:
+    # Runs at 10:30 AM Nepal Time (UTC+5:45) -> 04:45 UTC
+    - cron: '45 4 * * *'
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+cca      - name: Install System Dependencies (FFmpeg)        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Decode Credentials
+        env:
+          YT_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
+          YT_CLIENT_B64: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+        run: |
+          echo "$YT_TOKEN_B64" | base64 -d > token.pickle
+          echo "$YT_CLIENT_B64" | base64 -d > client_secret.json
+
+      - name: Create .env file from Secrets
+        run: |
+          echo "PEXELS_API_KEY=${{ secrets.PEXELS_API_KEY }}" >> .env
+          echo "PIXABAY_API_KEY=${{ secrets.PIXABAY_API_KEY }}" >> .env
+          echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" >> .env
+          echo "GEMINI_API_KEY_1=${{ secrets.GEMINI_API_KEY_1 }}" >> .env
+          echo "IG_ACCESS_TOKEN=${{ secrets.IG_ACCESS_TOKEN }}" >> .env
+          echo "IG_BUSINESS_ACCOUNT_ID=${{ secrets.IG_BUSINESS_ACCOUNT_ID }}" >> .env
+          echo "CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}" >> .env
+          echo "CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}" >> .env
+          echo "CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}" >> .env
+          # Add Coverr/Unsplash here if you are using them in day2_fix.py:
+          # echo "COVERR_API_KEY=${{ secrets.COVERR_API_KEY }}" >> .env
+          # echo "UNSPLASH_ACCESS_KEY=${{ secrets.UNSPLASH_ACCESS_KEY }}" >> .env
+
+      - name: Run Pipeline
+        run: |
+          # Create necessary directories that are ignored by git
+          mkdir -p output assets logs
+          chmod +x run_pipeline.sh
+          ./run_pipeline.sh

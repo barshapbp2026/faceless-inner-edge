@@ -1,0 +1,19 @@
+# Secrets (DO NOT COMMIT)
+.env
+.env.*
+*.pickle
+client_secret.json
+banned_topics.txt
+
+# Python & Virtual Environment
+venv/
+__pycache__/
+*.pyc
+
+# Generated Media & Logs
+output/
+assets/
+logs/
+
+# System files
+.DS_Store

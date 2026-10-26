@@ -1,0 +1,48 @@
+name: Faceless Video Pipeline
+
+on:
+  schedule:
+    # Runs at 10:30 AM Nepal Time (UTC+5:45) -> 04:45 UTC
+    - cron: '45 4 * * *'
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies (FFmpeg)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Decode Credentials
+        env:
+          YT_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
+          YT_CLIENT_B64: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+        run: |
+          echo "$YT_TOKEN_B64" | base64 -d > token.pickle
+          echo "$YT_CLIENT_B64" | base64 -d > client_secret.json
+
+      - name: Create .env file from single Secret
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+
+      - name: Run Pipeline
+        run: |
+          mkdir -p output assets logs
+          chmod +x run_pipeline_ci.sh
+          ./run_pipeline_ci.sh
