@@ -1,0 +1,183 @@
+import os, base64, pickle, re, requests, sys
+from google_auth_oauthlib.flow import Flow
+from nacl import encoding, public
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Added the 'youtube' scope for thumbnails
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube"
+]
+REDIRECT_URI = "http://localhost:8080/"
+GITHUB_PAT = os.getenv("GITHUB_PAT")
+GITHUB_REPO = os.getenv("GITHUB_REPO")
+SECRET_NAME = "YOUTUBE_TOKEN_PICKLE"
+
+def get_public_key():
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/secrets/public-key"
+    headers = {"Authorization": f"Bearer {GITHUB_PAT}", "Accept": "application/vnd.github+json"}
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    return r.json()["key_id"], r.json()["key"]
+
+def encrypt(public_key: str, secret_value: str) -> str:
+    public_key = public.PublicKey(public_key.encode("utf-8"), encoding.Base64Encoder())
+    sealed_box = public.SealedBox(public_key)
+    encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
+    return base64.b64encode(encrypted).decode("utf-8")
+
+def update_github_secret(secret_value):
+    try:
+        key_id, public_key = get_public_key()
+        encrypted_value = encrypt(public_key, secret_value)
+        
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/secrets/{SECRET_NAME}"
+        headers = {"Authorization": f"Bearer {GITHUB_PAT}", "Accept": "application/vnd.github+json"}
+        data = {"encrypted_value": encrypted_value, "key_id": key_id}
+        
+        r = requests.put(url, headers=headers, json=data)
+        if r.status_code in [201, 204]:
+            print(f"✅ Successfully updated {SECRET_NAME} on GitHub!")
+        else:
+            print(f"❌ Failed to update secret. Status: {r.status_code}")
+            print(r.text)
+    except Exception as e:
+        print(f"❌ Error updating GitHub secret: {e}")
+
+def main():
+    print("Starting YouTube Auth Flow...")
+    flow = Flow.from_client_secrets_file("client_secret.json", scopes=SCOPES, redirect_uri=REDIRECT_URI)
+    auth_url, _ = flow.authorization_url(access_type="offline", include_granted_scopes="true", prompt="consent")
+    
+    print("\n" + "="*70)
+    print("STEP 1: Copy this URL into your browser:")
+    print("="*70)
+    print(auth_url)
+    print("\n" + "="*70)
+    print("STEP 2: Sign in with the Google account that owns the channel.")
+    print("STEP 3: Click Allow. Browser will show 'site can't be reached'.")
+    print("STEP 4: Copy the FULL URL from the address bar.")
+    print("STEP 5: Paste it below and press Enter.")
+    print("="*70 + "\n")
+    
+    pasted = input("Paste full redirect URL (or just code): ").strip()
+    
+    if "code=" in pasted:
+        m = re.search(r"code=([^&]+)", pasted)
+        code = m.group(1) if m else None
+    else:
+        code = pasted
+        
+    if not code:
+        print("ERROR: No code found.")
+        sys.exit(1)
+        
+    print("Fetching token...")
+    flow.fetch_token(code=code)
+    
+    with open("token.pickle", "wb") as f:
+        pickle.dump(flow.credentials, f)
+        
+    with open("token.pickle", "rb") as f:
+        b64_token = base64.b64encode(f.read()).decode("utf-8")
+        
+    print("\nToken generated. Pushing to GitHub...")
+    update_github_secret(b64_token)
+
+if __name__ == "__main__":
+    main()
+
+import os, base64, pickle, re, requests, sys
+from google_auth_oauthlib.flow import Flow
+from nacl import encoding, public
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Added the 'youtube' scope for thumbnails
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube"
+]
+REDIRECT_URI = "http://localhost:8080/"
+GITHUB_PAT = os.getenv("GITHUB_PAT")
+GITHUB_REPO = os.getenv("GITHUB_REPO")
+SECRET_NAME = "YOUTUBE_TOKEN_PICKLE"
+
+def get_public_key():
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/secrets/public-key"
+    headers = {"Authorization": f"Bearer {GITHUB_PAT}", "Accept": "application/vnd.github+json"}
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    return r.json()["key_id"], r.json()["key"]
+
+def encrypt(public_key: str, secret_value: str) -> str:
+    public_key = public.PublicKey(public_key.encode("utf-8"), encoding.Base64Encoder())
+    sealed_box = public.SealedBox(public_key)
+    encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
+    return base64.b64encode(encrypted).decode("utf-8")
+
+def update_github_secret(secret_value):
+    try:
+        key_id, public_key = get_public_key()
+        encrypted_value = encrypt(public_key, secret_value)
+        
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/secrets/{SECRET_NAME}"
+        headers = {"Authorization": f"Bearer {GITHUB_PAT}", "Accept": "application/vnd.github+json"}
+        data = {"encrypted_value": encrypted_value, "key_id": key_id}
+        
+        r = requests.put(url, headers=headers, json=data)
+        if r.status_code in [201, 204]:
+            print(f"✅ Successfully updated {SECRET_NAME} on GitHub!")
+        else:
+            print(f"❌ Failed to update secret. Status: {r.status_code}")
+            print(r.text)
+    except Exception as e:
+        print(f"❌ Error updating GitHub secret: {e}")
+
+def main():
+    print("Starting YouTube Auth Flow...")
+    flow = Flow.from_client_secrets_file("client_secret.json", scopes=SCOPES, redirect_uri=REDIRECT_URI)
+    auth_url, _ = flow.authorization_url(access_type="offline", include_granted_scopes="true", prompt="consent")
+    
+    print("\n" + "="*70)
+    print("STEP 1: Copy this URL into your browser:")
+    print("="*70)
+    print(auth_url)
+    print("\n" + "="*70)
+    print("STEP 2: Sign in with the Google account that owns the channel.")
+    print("STEP 3: Click Allow. Browser will show 'site can't be reached'.")
+    print("STEP 4: Copy the FULL URL from the address bar.")
+    print("STEP 5: Paste it below and press Enter.")
+    print("="*70 + "\n")
+    
+    pasted = input("Paste full redirect URL (or just code): ").strip()
+    
+    if "code=" in pasted:
+        m = re.search(r"code=([^&]+)", pasted)
+        code = m.group(1) if m else None
+    else:
+        code = pasted
+        
+    if not code:
+        print("ERROR: No code found.")
+        sys.exit(1)
+        
+    print("Fetching token...")
+    flow.fetch_token(code=code)
+    
+    with open("token.pickle", "wb") as f:
+        pickle.dump(flow.credentials, f)
+        
+    with open("token.pickle", "rb") as f:
+        b64_token = base64.b64encode(f.read()).decode("utf-8")
+        
+    print("\nToken generated. Pushing to GitHub...")
+    update_github_secret(b64_token)
+
+if __name__ == "__main__":
+    main()
+
+
