@@ -36,20 +36,46 @@ def llm(prompt, temp=0.7):
         except Exception: continue
     raise Exception("All LLM keys failed.")
 
-# 1. Generate LONG Script (35 sentences for ~5 minutes)
-print("Generating 5-minute script (35 sentences)...")
+# 1. Generate LONG Script (700 words to ensure ~5 mins)
+print("Generating 5-minute script...")
 master_long_prompt = f"""
-You are a master documentary filmmaker. Write a 5-minute script about {TOPIC}.
-You must use EXACTLY 35 sentences following this arc:
-- Sentences 1-3: The Hook (Shocking question, setting the scene).
-- Sentences 4-15: The Context (Deep dive into the history and strange reality).
-- Sentences 16-25: The Escalation (Building tension, uncovering weird facts).
-- Sentences 26-32: The Twist (The mind-blowing revelation).
-- Sentences 33-35: The Outro (Philosophical implication).
-Output ONLY the 35 sentences. Do not number them.
+You are a master documentary filmmaker. Write a detailed, 700-word script about {TOPIC}.
+You must follow this arc:
+- Hook (Shocking question, setting the scene).
+- Context (Deep dive into the history and strange reality).
+- Escalation (Building tension, uncovering weird facts).
+- Twist (The mind-blowing revelation).
+- Outro (Philosophical implication).
+Output ONLY the script text. Do not include titles, intros, or any formatting like bolding.
 """
 script = llm(master_long_prompt, temp=0.7).strip()
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', script) if s.strip()]
+
+# Safety check: if AI failed to write anything, use a fallback
+if len(sentences) < 10:
+    print("  [WARNING] AI failed to generate enough sentences. Using fallback script.")
+    sentences = [
+        f"What if everything you thought you knew about {TOPIC} was wrong?",
+        "For centuries, humanity has looked at the stars and wondered about the unknown.",
+        "But recently, scientists have uncovered something that defies all explanation.",
+        "The data doesn't just challenge our understanding of physics, it shatters it.",
+        "It suggests that reality is far stranger and more complex than we ever imagined.",
+        "We built our civilization on the idea that the universe follows strict rules.",
+        "But at the quantum level, those rules break down entirely.",
+        "Particles exist in multiple states at once, until the moment they are observed.",
+        "This means that consciousness itself might be the key to reality.",
+        "Without a mind to observe it, does the universe even exist?",
+        "Some theorists believe we are living in a holographic projection.",
+        "Others think we are just one of infinite parallel universes.",
+        "The implications are staggering, and they change everything we know.",
+        "Are we the masters of our destiny, or just passengers in a cosmic simulation?",
+        "The truth is still out there, waiting to be discovered.",
+        "And the deeper we look, the stranger it becomes."
+    ]
+    # Duplicate sentences to make it longer if needed
+    while len(sentences) < 20:
+        sentences.extend(sentences)
+
 print(f"Script generated ({len(sentences)} sentences).")
 
 # 2. Director AI
@@ -65,17 +91,10 @@ director_raw = llm(director_prompt, temp=0.6)
 director_raw = re.sub(r"^```(?:json)?", "", director_raw).strip(); director_raw = re.sub(r"```$", "", director_raw).strip()
 m = re.search(r"\[[\s\S]*\]", director_raw); timeline = json.loads(m.group()) if m else [{"media": "stock_video", "prompt": "space"} for _ in sentences]
 
-# --- NEW THUMBNAIL GENERATOR (Exactly like your examples) ---
+# --- THUMBNAIL GENERATOR ---
 def generate_thumbnail():
     print("Generating Cinematic Thumbnail...")
-    
-    # 1. Get Text from AI
-    text_prompt = f"""
-    Generate a JSON object with two keys for a YouTube thumbnail about {TOPIC}.
-    "header": A 2-4 word ALL CAPS question (e.g., "WHY BLUE?", "WHY SO POWERFUL?").
-    "subheader": A 4-7 word curious statement ending in "..." (e.g., "It hides a dark secret...", "You'll die in a minute...").
-    Return ONLY the JSON.
-    """
+    text_prompt = f"Generate a JSON object with two keys for a YouTube thumbnail about {TOPIC}. 'header': 2-4 word ALL CAPS question. 'subheader': 4-7 word curious statement. Return ONLY valid JSON."
     text_raw = llm(text_prompt, temp=0.8)
     text_raw = re.sub(r"^```(?:json)?", "", text_raw).strip(); text_raw = re.sub(r"```$", "", text_raw).strip()
     tm = re.search(r"\{[\s\S]*\}", text_raw)
@@ -85,15 +104,11 @@ def generate_thumbnail():
         subheader = text_data.get("subheader", "You won't believe this...")
     except:
         header, subheader = "MIND BLOWN", "You won't believe this..."
-
-    print(f"  Header: {header} | Sub: {subheader}")
-
-    # 2. Get Background Image (Alternate AI and Unsplash)
+    
     bg_img = None
     use_ai = random.choice([True, False])
     
     if use_ai:
-        print("  Fetching AI Background...")
         url = f"https://image.pollinations.ai/prompt/{quote(TOPIC + ', cinematic, dramatic lighting, 8k')}?width=1280&height=720&nologo=true&token={POLLINATIONS_KEY}"
         try:
             r = requests.get(url, timeout=45)
@@ -101,7 +116,6 @@ def generate_thumbnail():
         except Exception: pass
         
     if bg_img is None:
-        print("  Fetching Unsplash Background...")
         try:
             r = requests.get("https://api.unsplash.com/search/photos", params={"query": TOPIC, "orientation": "landscape", "per_page": 1}, headers={"Authorization": f"Client-ID {UNSPLASH_KEY}"}, timeout=15)
             if r.json().get("results"):
@@ -110,46 +124,32 @@ def generate_thumbnail():
                 bg_img = Image.open(io.BytesIO(r_img.content)).convert("RGB")
         except Exception: pass
 
-    if bg_img is None:
-        bg_img = Image.new("RGB", (1280, 720), color="black")
+    if bg_img is None: bg_img = Image.new("RGB", (1280, 720), color="black")
 
-    # 3. Resize and Create Canvas
     bg_img = ImageOps.fit(bg_img, (1280, 720), Image.Resampling.LANCZOS)
     draw = ImageDraw.Draw(bg_img)
 
-    # 4. Add slight dark gradient to left side for text readability
     overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
     for x in range(700):
-        alpha = int(180 * (1 - (x / 700)))  # Fades from 180 to 0
-        for y in range(720):
-            overlay.putpixel((x, y), (0, 0, 0, alpha))
+        alpha = int(180 * (1 - (x / 700)))
+        for y in range(720): overlay.putpixel((x, y), (0, 0, 0, alpha))
     bg_img = Image.alpha_composite(bg_img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(bg_img)
 
-    # 5. Load Fonts
     try:
-        # Need a bold, impact-style font
         font_header = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 140)
         font_sub = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 50)
     except IOError:
-        font_header = ImageFont.load_default()
-        font_sub = ImageFont.load_default()
+        font_header = ImageFont.load_default(); font_sub = ImageFont.load_default()
 
-    # 6. Draw Header (Yellow, large, left-aligned)
-    x_pos, y_pos = 50, 250
-    draw.text((x_pos, y_pos), header, font=font_header, fill="yellow", stroke_width=10, stroke_fill="black")
-
-    # 7. Draw Subheader (White, smaller, below header)
-    sub_y = y_pos + 170
-    draw.text((x_pos, sub_y), subheader, font=font_sub, fill="white", stroke_width=6, stroke_fill="black")
-
-    # 8. Save
+    draw.text((50, 250), header, font=font_header, fill="yellow", stroke_width=10, stroke_fill="black")
+    draw.text((50, 420), subheader, font=font_sub, fill="white", stroke_width=6, stroke_fill="black")
     bg_img.save("output/thumbnail.jpg", quality=95)
     print("  ✅ Cinematic Thumbnail generated!")
 
 generate_thumbnail()
 
-# --- VOICEOVERS ---
+# --- VOICEOVERS WITH FALLBACK ---
 async def make_voices():
     for i, s in enumerate(sentences):
         if not s.strip(): continue
@@ -160,7 +160,6 @@ async def make_voices():
                 success = True; break
             except Exception: await asyncio.sleep(2)
         if not success:
-            print(f"      [Edge-TTS blocked] -> gTTS fallback for sentence {i+1}")
             from gtts import gTTS
             gTTS(text=s, lang='en', slow=False).save(f"output/long_voice_{i}.mp3")
 
@@ -217,18 +216,6 @@ def fetch_unsplash_image(q, out):
     except Exception: return False
     return False
 
-def fetch_coverr(q, out):
-    try:
-        r = requests.get("https://api.coverr.co/videos", params={"query": q, "per_page": 5, "orientation": "landscape"}, headers={"Authorization": f"Bearer {COVERR_KEY}"}, timeout=15)
-        v = r.json().get("hits", []) or r.json().get("videos", [])
-        if v:
-            url = v[0].get("urls", {}).get("mp4_download") or v[0].get("url")
-            if url:
-                with open(out, "wb") as f: f.write(requests.get(url, timeout=40).content)
-                return True
-    except Exception: return False
-    return False
-
 # --- PROCESSING ---
 CINEMATIC_FILTER = "eq=contrast=1.1:saturation=1.2,vignette=PI/5,drawbox=y=0:color=black@1.0:t=140,drawbox=y=ih-140:color=black@1.0:t=140"
 
@@ -242,14 +229,12 @@ def process_vid(src, out, d):
     vf = f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=30,setsar=1,{CINEMATIC_FILTER},fade=t=in:st=0:d=1,fade=t=out:st={d-1}:d=1"
     subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", src, "-t", str(d), "-vf", vf, "-c:v", "libx264", "-an", out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-# --- BUILD SCENES (With Image Rotation) ---
+# --- BUILD SCENES ---
 segs = []
 for i, sentence in enumerate(sentences):
     scene = timeline[i] if i < len(timeline) else {"media": "stock_video", "prompt": "space"}
     media = scene.get("media", "stock_video")
     prompt = scene.get("prompt", "space")
-    
-    # Force rotation if director gets lazy
     if i % 3 == 0: media = "ai_image"
     elif i % 3 == 1: media = "unsplash"
     
@@ -264,10 +249,8 @@ for i, sentence in enumerate(sentences):
     if media == "ai_video" and fetch_ai_video(prompt, raw_v): process_vid(raw_v, out, d); success = True
     elif media == "ai_image" and fetch_ai_image(prompt, raw_i): process_img(raw_i, out, d, "in" if i%2==0 else "out"); success = True
     elif media == "unsplash" and fetch_unsplash_image(prompt, raw_i): process_img(raw_i, out, d, "out" if i%2==0 else "in"); success = True
-    elif media == "coverr" and fetch_coverr(prompt, raw_v): process_vid(raw_v, out, d); success = True
     elif media == "stock_video" and fetch_stock_video(prompt, raw_v): process_vid(raw_v, out, d); success = True
 
-    # Fallbacks
     if not success:
         print(f"      [Warning] {media} failed. Starting fallback chain...")
         if fetch_ai_image(prompt, raw_i): process_img(raw_i, out, d, "in"); success = True; print("      -> Rescued by AI Image")
@@ -275,6 +258,7 @@ for i, sentence in enumerate(sentences):
         elif fetch_stock_video(prompt, raw_v): process_vid(raw_v, out, d); success = True; print("      -> Rescued by Pexels/Pixabay")
 
     if not success:
+        print("      [CRITICAL] All media failed. Using Black Screen.")
         subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s=1920x1080:d={d}", "-c:v", "libx264", "-t", str(d), out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     segs.append((out, f"output/long_voice_{i}.mp3"))
@@ -295,15 +279,8 @@ with open("assets/long_voices.txt", "w") as f:
     for _, voice in segs: f.write(f"file '{os.path.abspath(voice)}'\n")
 subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "assets/long_voices.txt", "-c", "copy", "output/voice.mp3"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-# --- MOTION GRAPHICS ---
 safe_title = TOPIC.replace("'", "").replace(":", "").replace(",", "")
 title_filter = f"drawtext=text='{safe_title}':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2+100:alpha='if(lt(t,1),t,if(lt(t,4),1,if(lt(t,5),(5-t),0)))'"
 
-subprocess.run([
-    "ffmpeg", "-y", "-i", "output/video_only.mp4", "-i", "output/voice.mp3",
-    "-vf", title_filter, "-c:v", "libx264", "-c:a", "aac", "-shortest", "-pix_fmt", "yuv420p",
-    "output/final_video.mp4"
-], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
+subprocess.run(["ffmpeg", "-y", "-i", "output/video_only.mp4", "-i", "output/voice.mp3", "-vf", title_filter, "-c:v", "libx264", "-c:a", "aac", "-shortest", "-pix_fmt", "yuv420p", "output/final_video.mp4"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print("\nDONE: Long video generated successfully.")
-
