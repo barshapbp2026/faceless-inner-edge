@@ -1,4 +1,4 @@
-import os, subprocess
+import os, subprocess, sys
 from faster_whisper import WhisperModel
 
 VOICE_FILE = "output/voice.mp3"
@@ -6,13 +6,22 @@ ASS_FILE = "output/captions.ass"
 VIDEO_IN = "output/final_video.mp4"
 VIDEO_OUT = "output/final_video_subbed.mp4"
 
-# Detect if this is a Short or Long video based on duration
+if not os.path.exists(VIDEO_IN):
+    print(f"ERROR: {VIDEO_IN} not found. The video generation failed.")
+    sys.exit(1)
+
+# Detect if this is a Short or Long video
 duration_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", VIDEO_IN]
-duration = float(subprocess.run(duration_cmd, stdout=subprocess.PIPE, text=True).stdout.strip())
+duration_str = subprocess.run(duration_cmd, stdout=subprocess.PIPE, text=True).stdout.strip()
+try:
+    duration = float(duration_str)
+except ValueError:
+    print(f"ERROR: Could not read video duration. Output was: '{duration_str}'")
+    sys.exit(1)
 
 IS_SHORT = duration < 65
-FONT_SIZE = 22 if IS_SHORT else 65   # Huge text for long videos
-MARGIN_V = 320 if IS_SHORT else 160  # 160 places it just above the black letterbox bars
+FONT_SIZE = 22 if IS_SHORT else 65
+MARGIN_V = 320 if IS_SHORT else 160
 WORDS_PER_CHUNK = 4
 
 NORMAL_COLOR = "&H00FFFFFF"
