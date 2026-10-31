@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e # Stop immediately if any command fails
+
 echo "=== [1/4] Researching Topic & Generating 5-Min Video ==="
 python3 scripts/researcher.py
 python3 scripts/day2_long.py
