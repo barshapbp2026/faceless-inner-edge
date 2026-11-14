@@ -10,8 +10,6 @@ load_dotenv()
 GROQ_KEYS = [os.getenv(f"GROQ_API_KEY_{i}") for i in range(1, 10) if os.getenv(f"GROQ_API_KEY_{i}")]
 GEMINI_KEYS = [os.getenv(f"GEMINI_API_KEY_{i}") for i in range(1, 10) if os.getenv(f"GEMINI_API_KEY_{i}")]
 PEXELS_KEYS = [os.getenv(f"PEXELS_API_KEY_{i}") for i in range(1, 10) if os.getenv(f"PEXELS_API_KEY_{i}")]
-PIXABAY_KEY = os.getenv("PIXABAY_API_KEY")
-COVERR_KEY = os.getenv("COVERR_API_KEY")
 UNSPLASH_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 POLLINATIONS_KEY = os.getenv("POLLINATIONS_API_KEY")
 
@@ -26,41 +24,27 @@ def llm(prompt, temp=0.7):
             c = Groq(api_key=key)
             r = c.chat.completions.create(messages=[{"role": "user", "content": prompt}], model="openai/gpt-oss-20b", temperature=temp)
             text = r.choices[0].message.content
-            if text and len(text.strip()) > 10:
-                return text
-        except Exception as e:
-            print(f"  [Groq API Error: {e}] Trying next key...")
-            continue
+            if text and len(text.strip()) > 10: return text
+        except Exception: continue
     import google.generativeai as genai
     for gkey in GEMINI_KEYS:
         try:
             genai.configure(api_key=gkey)
             text = genai.GenerativeModel("gemini-2.0-flash").generate_content(prompt).text
-            if text and len(text.strip()) > 10:
-                return text
-        except Exception as e:
-            print(f"  [Gemini API Error: {e}] Trying next key...")
-            continue
-    print("  [CRITICAL] All LLM keys failed or returned empty.")
+            if text and len(text.strip()) > 10: return text
+        except Exception: continue
     return ""
 
-# 1. Generate Script
 print("Generating 5-minute script...")
 master_long_prompt = f"""
 You are a master documentary filmmaker. Write a detailed, 700-word script about {TOPIC}.
-You must follow this arc:
-- Hook (Shocking question, setting the scene).
-- Context (Deep dive into the history and strange reality).
-- Escalation (Building tension, uncovering weird facts).
-- Twist (The mind-blowing revelation).
-- Outro (Philosophical implication).
-Output ONLY the script text. Do not include titles, intros, or any formatting like bolding.
+Follow this arc: Hook, Context, Escalation, Twist, Outro.
+Output ONLY the script text.
 """
 script = llm(master_long_prompt, temp=0.7).strip()
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', script) if s.strip()]
 
 if len(sentences) < 10:
-    print("  [WARNING] AI failed to generate enough sentences. Using fallback script.")
     sentences = [
         f"What if everything you thought you knew about {TOPIC} was wrong?",
         "For centuries, humanity has looked at the stars and wondered about the unknown.",
@@ -72,29 +56,29 @@ if len(sentences) < 10:
         "Particles exist in multiple states at once, until the moment they are observed.",
         "This means that consciousness itself might be the key to reality.",
         "Without a mind to observe it, does the universe even exist?",
-        "Some theorists believe we are living in a holographic projection.",
-        "Others think we are just one of infinite parallel universes.",
-        "The implications are staggering, and they change everything we know.",
-        "Are we the masters of our destiny, or just passengers in a cosmic simulation?",
         "The truth is still out there, waiting to be discovered."
     ]
-    while len(sentences) < 20:
-        sentences.extend(sentences)
+    while len(sentences) < 20: sentences.extend(sentences)
 
 print(f"Script generated ({len(sentences)} sentences).")
 
-# 2. Director AI
 print("Director AI planning timeline...")
-director_prompt = f"You are a video director. Assign 'ai_image', 'stock_video', or 'unsplash' to each sentence. Return ONLY a JSON array: [{{\"media\": \"ai_image\", \"prompt\": \"...\"}}]\nSentences: {json.dumps(sentences)}"
+director_prompt = f"You are a video director. Assign 'ai_image', 'stock_video', or 'unsplash' to each sentence. Return ONLY JSON array: [{{\"media\": \"ai_image\", \"prompt\": \"...\"}}]\nSentences: {json.dumps(sentences)}"
 director_raw = llm(director_prompt, temp=0.6)
 director_raw = re.sub(r"^```(?:json)?", "", director_raw).strip(); director_raw = re.sub(r"```$", "", director_raw).strip()
-m = re.search(r"\[[\s\S]*\]", director_raw); timeline = json.loads(m.group()) if m else [{"media": "stock_video", "prompt": "space"} for _ in sentences]
+m = re.search(r"\[[\s\S]*\]", director_raw)
+timeline = json.loads(m.group()) if m else [{"media": "stock_video", "prompt": "space"} for _ in sentences]
 
-# --- THUMBNAIL ---
+# --- HIGH-CTR CATCHY THUMBNAIL ---
 def generate_thumbnail():
-    print("Generating Cinematic Thumbnail...")
-    text_prompt = f"Generate JSON with 'header' (2-4 ALL CAPS words) and 'subheader' (4-7 words) for a video about {TOPIC}. Return ONLY JSON."
-    text_raw = llm(text_prompt, temp=0.8)
+    print("Generating Catchy Thumbnail...")
+    text_prompt = f"""
+    Generate JSON with 'header' and 'subheader' for a YouTube thumbnail about {TOPIC}. 
+    'header': 2-4 words, ALL CAPS, extremely click-baity (e.g., "YOU WERE LIED TO", "NASA IS HIDING THIS", "TIME IS FAKE").
+    'subheader': 4-7 words, creating a massive information gap (e.g., "The terrifying truth they won't tell you...").
+    Return ONLY JSON.
+    """
+    text_raw = llm(text_prompt, temp=0.9)
     text_raw = re.sub(r"^```(?:json)?", "", text_raw).strip(); text_raw = re.sub(r"```$", "", text_raw).strip()
     tm = re.search(r"\{[\s\S]*\}", text_raw)
     try:
@@ -119,29 +103,40 @@ def generate_thumbnail():
         except Exception: pass
 
     if bg_img is None: bg_img = Image.new("RGB", (1280, 720), color="black")
+    
     bg_img = ImageOps.fit(bg_img, (1280, 720), Image.Resampling.LANCZOS)
-    draw = ImageDraw.Draw(bg_img)
-
+    
+    # Heavy left-side gradient for maximum text pop
     overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
-    for x in range(700):
-        alpha = int(180 * (1 - (x / 700)))
+    for x in range(900): # Extend gradient to x=900
+        alpha = int(240 * (1 - (x / 900))) # Darker gradient
         for y in range(720): overlay.putpixel((x, y), (0, 0, 0, alpha))
     bg_img = Image.alpha_composite(bg_img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(bg_img)
 
     try:
-        f_h = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 140)
+        # Huge, bold font
+        f_h = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 130)
         f_s = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 50)
     except IOError: f_h, f_s = ImageFont.load_default(), ImageFont.load_default()
 
-    draw.text((50, 250), header, font=f_h, fill="yellow", stroke_width=10, stroke_fill="black")
-    draw.text((50, 420), subheader, font=f_s, fill="white", stroke_width=6, stroke_fill="black")
+    # MOVE TEXT DOWN (Y=380 instead of 250)
+    x_pos, y_pos = 50, 380 
+    
+    # Draw Header with Drop Shadow (Black shadow offset by 5px)
+    draw.text((x_pos+5, y_pos+5), header, font=f_h, fill="black", stroke_width=10, stroke_fill="black")
+    draw.text((x_pos, y_pos), header, font=f_h, fill="yellow", stroke_width=10, stroke_fill="black")
+    
+    # Draw Subheader with Drop Shadow
+    sub_y = y_pos + 160
+    draw.text((x_pos+3, sub_y+3), subheader, font=f_s, fill="black", stroke_width=6, stroke_fill="black")
+    draw.text((x_pos, sub_y), subheader, font=f_s, fill="white", stroke_width=6, stroke_fill="black")
+    
     bg_img.save("output/thumbnail.jpg", quality=95)
-    print("  ✅ Cinematic Thumbnail generated!")
+    print("  ✅ Catchy Thumbnail generated!")
 
 generate_thumbnail()
 
-# --- VOICEOVERS ---
 async def make_voices():
     for i, s in enumerate(sentences):
         if not s.strip(): continue
@@ -162,7 +157,6 @@ def dur(path):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path], stdout=subprocess.PIPE, text=True)
     return float(r.stdout.strip())
 
-# --- FETCHERS ---
 def fetch_ai_image(prompt, out):
     url = f"https://image.pollinations.ai/prompt/{quote(prompt + ', 8k, cinematic')}?width=1920&height=1080&nologo=true&token={POLLINATIONS_KEY}"
     try:
@@ -192,7 +186,6 @@ def fetch_unsplash_image(q, out):
     except Exception: return False
     return False
 
-# --- PROCESSING ---
 CINEMATIC_FILTER = "eq=contrast=1.1:saturation=1.2,vignette=PI/5,drawbox=y=0:color=black@1.0:t=140,drawbox=y=ih-140:color=black@1.0:t=140"
 
 def process_img(img, out, d, dir="in"):
@@ -217,7 +210,6 @@ for i, sentence in enumerate(sentences):
     out = f"assets/long_seg_{i}.mp4"
     raw_v = f"assets/raw_{i}.mp4"
     raw_i = f"assets/raw_{i}.jpg"
-    print(f"  [{i+1}/{len(sentences)}] {media.upper()} | '{prompt}' | {d:.1f}s")
     
     success = False
     if media == "ai_image" and fetch_ai_image(prompt, raw_i): process_img(raw_i, out, d, "in"); success = True
@@ -241,9 +233,7 @@ for i, (sv, av) in enumerate(segs):
     subprocess.run(["ffmpeg", "-y", "-i", sv, "-i", av, "-c:v", "copy", "-c:a", "aac", "-shortest", "-pix_fmt", "yuv420p", out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     finals.append(out)
 
-if not finals:
-    print("ERROR: No video segments were created. Crashing to prevent empty upload.")
-    sys.exit(1)
+if not finals: sys.exit(1)
 
 with open("assets/long_segments.txt", "w") as f:
     for s in finals: f.write(f"file '{os.path.abspath(s)}'\n")
