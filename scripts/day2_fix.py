@@ -96,13 +96,15 @@ def dur(path):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path], stdout=subprocess.PIPE, text=True)
     return float(r.stdout.strip())
 
+# --- FIXED FETCHERS (RANDOM SELECTION) ---
 def pexels_video(q, out):
     for key in PEXELS_KEYS:
         try:
-            r = requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&orientation=portrait&per_page=5", headers={"Authorization": key}, timeout=15)
+            r = requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&orientation=portrait&per_page=10", headers={"Authorization": key}, timeout=15)
             v = r.json().get("videos", [])
             if v:
-                pick = random.choice(v[:5]); files = sorted(pick["video_files"], key=lambda x: x.get("width", 0), reverse=True)
+                pick = random.choice(v[:10]) # Random from top 10
+                files = sorted(pick["video_files"], key=lambda x: x.get("width", 0), reverse=True)
                 with open(out, "wb") as f: f.write(requests.get(files[0]["link"], timeout=40).content)
                 return True
         except Exception: continue
@@ -110,10 +112,11 @@ def pexels_video(q, out):
 
 def pixabay_video(q, out):
     try:
-        r = requests.get(f"https://pixabay.com/api/videos/?key={PIXABAY_KEY}&q={requests.utils.quote(q)}&per_page=5", timeout=15)
+        r = requests.get(f"https://pixabay.com/api/videos/?key={PIXABAY_KEY}&q={requests.utils.quote(q)}&per_page=10", timeout=15)
         h = r.json().get("hits", [])
         if h:
-            pick = random.choice(h[:5]); url = (pick["videos"].get("medium", {}).get("url") or pick["videos"]["small"]["url"])
+            pick = random.choice(h[:10]) # Random from top 10
+            url = (pick["videos"].get("medium", {}).get("url") or pick["videos"]["small"]["url"])
             with open(out, "wb") as f: f.write(requests.get(url, timeout=40).content)
             return True
     except Exception: return False
@@ -121,10 +124,10 @@ def pixabay_video(q, out):
 
 def unsplash_image(q, out):
     try:
-        r = requests.get("https://api.unsplash.com/search/photos", params={"query": q, "orientation": "portrait", "per_page": 5}, headers={"Authorization": f"Client-ID {UNSPLASH_KEY}"}, timeout=15)
+        r = requests.get("https://api.unsplash.com/search/photos", params={"query": q, "orientation": "portrait", "per_page": 10}, headers={"Authorization": f"Client-ID {UNSPLASH_KEY}"}, timeout=15)
         results = r.json().get("results", [])
         if results:
-            pick = random.choice(results[:5])
+            pick = random.choice(results[:10]) # Random from top 10
             with open(out, "wb") as f: f.write(requests.get(pick["urls"]["full"], timeout=40).content)
             return True
     except Exception: return False
