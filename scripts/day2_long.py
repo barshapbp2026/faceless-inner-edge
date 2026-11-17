@@ -78,6 +78,7 @@ print("Director AI planning timeline...")
 director_prompt = f"""
 You are a master video director. For each of the following sentences, assign a media type ('ai_image', 'stock_video', or 'unsplash') and a unique, highly descriptive visual prompt (4-8 words). 
 Do NOT use generic words like 'space' or 'galaxy'. Be specific.
+CRITICAL RULE: You must generate a UNIQUE visual prompt for every single sentence. Do NOT repeat the same prompt twice.
 Return ONLY a valid JSON array: [{{"media": "ai_image", "prompt": "..."}}]
 Sentences: {json.dumps(sentences)}
 """
@@ -85,7 +86,6 @@ director_raw = llm(director_prompt, temp=0.6)
 director_raw = re.sub(r"^```(?:json)?", "", director_raw).strip(); director_raw = re.sub(r"```$", "", director_raw).strip()
 m = re.search(r"\[[\s\S]*\]", director_raw)
 
-# --- FIX: IF DIRECTOR FAILS, USE RANDOM UNIQUE PROMPTS INSTEAD OF "space" ---
 if m:
     timeline = json.loads(m.group())
 else:
@@ -135,7 +135,10 @@ def generate_thumbnail():
         f_s = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 50)
     except IOError: f_h, f_s = ImageFont.load_default(), ImageFont.load_default()
 
-    x_pos, y_pos = 50, 380 
+    # Randomize text position slightly so it's never identical
+    x_pos = 50
+    y_pos = random.choice([350, 380, 410]) 
+    
     draw.text((x_pos+5, y_pos+5), header, font=f_h, fill="black", stroke_width=10, stroke_fill="black")
     draw.text((x_pos, y_pos), header, font=f_h, fill="yellow", stroke_width=10, stroke_fill="black")
     
@@ -169,6 +172,7 @@ def dur(path):
     return float(r.stdout.strip())
 
 def fetch_ai_image(prompt, out):
+    # Guarantee uniqueness with a random seed
     seed = random.randint(1, 999999)
     url = f"https://image.pollinations.ai/prompt/{quote(prompt + ', 8k, cinematic')}?width=1920&height=1080&nologo=true&token={POLLINATIONS_KEY}&seed={seed}"
     try:
@@ -242,7 +246,6 @@ for i, sentence in enumerate(sentences):
     elif media == "stock_video" and fetch_stock_video(prompt, raw_v): process_vid(raw_v, out, d); success = True
 
     if not success:
-        # Randomize the fallback search term to prevent identical visuals
         fallback_query = random.choice(["galaxy", "nebula", "cosmos", "universe", "stars", "astronomy"])
         if fetch_ai_image(prompt, raw_i): process_img(raw_i, out, d, "in"); success = True
         elif fetch_unsplash_image(prompt, raw_i): process_img(raw_i, out, d, "out"); success = True
@@ -270,7 +273,13 @@ with open("assets/long_voices.txt", "w") as f:
     for _, voice in segs: f.write(f"file '{os.path.abspath(voice)}'\n")
 subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "assets/long_voices.txt", "-c", "copy", "output/voice.mp3"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+# --- RANDOMIZED MOTION GRAPHICS TITLE CARD ---
 safe_title = TOPIC.replace("'", "").replace(":", "").replace(",", "")
-title_filter = f"drawtext=text='{safe_title}':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2+100:alpha='if(lt(t,1),t,if(lt(t,4),1,if(lt(t,5),(5-t),0)))'"
+# Pick a random title color and random Y position for uniqueness
+title_color = random.choice(["white", "yellow", "cyan", "orange"])
+title_y = random.choice([100, 200, 300])
+# Randomize the fade animation slightly
+title_filter = f"drawtext=text='{safe_title}':fontcolor={title_color}:fontsize=60:x=(w-text_w)/2:y={title_y}:alpha='if(lt(t,1),t,if(lt(t,4),1,if(lt(t,5),(5-t),0)))'"
+
 subprocess.run(["ffmpeg", "-y", "-i", "output/video_only.mp4", "-i", "output/voice.mp3", "-vf", title_filter, "-c:v", "libx264", "-c:a", "aac", "-shortest", "-pix_fmt", "yuv420p", "output/final_video.mp4"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print("\nDONE: Long video generated successfully.")

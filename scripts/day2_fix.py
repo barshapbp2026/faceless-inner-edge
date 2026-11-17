@@ -70,11 +70,10 @@ kw = llm("For each sentence, output 2-3 visual keywords.\n\n" + "\n".join(f"{i+1
 kw = re.sub(r"^```(?:json)?", "", kw).strip(); kw = re.sub(r"```$", "", kw).strip()
 m = re.search(r"\[[\s\S]*\]", kw)
 
-# --- FIX: IF KEYWORDS FAIL, USE RANDOM UNIQUE PROMPTS ---
+fallback_kws = ["galaxy", "nebula", "black hole", "quantum physics", "telescope", "cosmos"]
 if m:
     keywords = json.loads(m.group())
 else:
-    fallback_kws = ["galaxy", "nebula", "black hole", "quantum physics", "telescope", "cosmos"]
     keywords = [random.choice(fallback_kws) for _ in sentences]
 while len(keywords) < len(sentences): keywords.append(random.choice(fallback_kws))
 
@@ -176,9 +175,17 @@ for i, (sv, av) in enumerate(segs):
 
 with open("assets/final_segments.txt", "w") as f:
     for s in finals: f.write(f"file '{os.path.abspath(s)}'\n")
-subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "assets/final_segments.txt", "-c", "copy", "output/final_video.mp4"])
+subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "assets/final_segments.txt", "-c", "copy", "output/video.mp4"])
 
 with open("assets/voices.txt", "w") as f:
     for _, voice in segs: f.write(f"file '{os.path.abspath(voice)}'\n")
 subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "assets/voices.txt", "-c", "copy", "output/voice.mp3"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+# --- RANDOMIZED MOTION GRAPHICS TITLE CARD FOR SHORTS ---
+safe_title = TOPIC.replace("'", "").replace(":", "").replace(",", "")
+title_color = random.choice(["white", "yellow", "cyan", "orange"])
+title_y = random.choice([200, 300, 400])
+title_filter = f"drawtext=text='{safe_title}':fontcolor={title_color}:fontsize=45:x=(w-text_w)/2:y={title_y}:alpha='if(lt(t,0.5),t*2,if(lt(t,3),1,if(lt(t,4),(4-t),0)))'"
+
+subprocess.run(["ffmpeg", "-y", "-i", "output/video.mp4", "-i", "output/voice.mp3", "-vf", title_filter, "-c:v", "libx264", "-c:a", "aac", "-shortest", "-pix_fmt", "yuv420p", "output/final_video.mp4"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print("\nDONE: Short generated.")
