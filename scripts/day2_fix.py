@@ -44,6 +44,13 @@ def llm(prompt, temp=0.7):
         except Exception: continue
     raise Exception("All LLM keys failed.")
 
+def clean_text(text):
+    text = re.sub(r'\*+', '', text)
+    text = re.sub(r'_+', '', text)
+    text = re.sub(r'#+', '', text)
+    text = text.replace('"', '').replace("'", "")
+    return text.strip()
+
 print("Generating Master Short script...")
 master_short_prompt = f"""
 You are a master viral storyteller. Write a 60-second script about {TOPIC}.
@@ -52,9 +59,10 @@ You must use EXACTLY 4 sentences following this arc:
 2. Context: The strange reality or mystery.
 3. Twist: The most mind-blowing revelation.
 4. Outro: A lingering philosophical question.
-Output ONLY the 4 sentences.
+CRITICAL: Output ONLY the 4 sentences. Do NOT use asterisks, symbols, or markdown.
 """
 script = llm(master_short_prompt, temp=0.7).strip()
+script = clean_text(script)
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', script) if s.strip()]
 print(f"Script:\n{script}\n")
 
@@ -75,11 +83,9 @@ async def make_voices():
                 success = True
                 break
             except Exception as e:
-                print(f"      [Edge-TTS Error: {e}] Retrying {attempt+1}/3...")
                 await asyncio.sleep(2)
         
         if not success:
-            print(f"      [Edge-TTS blocked] -> gTTS fallback for sentence {i+1}")
             from gtts import gTTS
             tts = gTTS(text=s, lang='en', slow=False)
             tts.save(f"output/voice_{i}.mp3")
@@ -137,7 +143,6 @@ segs = []
 for i, sentence in enumerate(sentences):
     q = keywords[i]; v = f"output/voice_{i}.mp3"; d = dur(v); out = f"assets/seg_{i}.mp4"
     mode = MEDIA_MODE[i % len(MEDIA_MODE)]
-    print(f"  [{i+1}/4] {mode.upper():5} | '{q}' | {d:.1f}s")
     
     ok = False
     if mode == "video":

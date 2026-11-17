@@ -35,13 +35,24 @@ def llm(prompt, temp=0.7):
         except Exception: continue
     return ""
 
+# --- TEXT CLEANER (Removes asterisks and symbols) ---
+def clean_text(text):
+    text = re.sub(r'\*+', '', text)          # Remove asterisks
+    text = re.sub(r'_+', '', text)           # Remove underscores
+    text = re.sub(r'#+', '', text)           # Remove hashtags
+    text = text.replace('"', '').replace("'", "") # Remove quotes
+    return text.strip()
+
 print("Generating 5-minute script...")
 master_long_prompt = f"""
 You are a master documentary filmmaker. Write a detailed, 700-word script about {TOPIC}.
 Follow this arc: Hook, Context, Escalation, Twist, Outro.
-Output ONLY the script text.
+CRITICAL: Output ONLY the raw script text. Do NOT use any markdown formatting, asterisks, bullet points, bold text, or symbols.
 """
 script = llm(master_long_prompt, temp=0.7).strip()
+
+# Clean the script before splitting
+script = clean_text(script)
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', script) if s.strip()]
 
 if len(sentences) < 10:
@@ -106,28 +117,22 @@ def generate_thumbnail():
     
     bg_img = ImageOps.fit(bg_img, (1280, 720), Image.Resampling.LANCZOS)
     
-    # Heavy left-side gradient for maximum text pop
     overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
-    for x in range(900): # Extend gradient to x=900
-        alpha = int(240 * (1 - (x / 900))) # Darker gradient
+    for x in range(900):
+        alpha = int(240 * (1 - (x / 900)))
         for y in range(720): overlay.putpixel((x, y), (0, 0, 0, alpha))
     bg_img = Image.alpha_composite(bg_img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(bg_img)
 
     try:
-        # Huge, bold font
         f_h = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 130)
         f_s = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 50)
     except IOError: f_h, f_s = ImageFont.load_default(), ImageFont.load_default()
 
-    # MOVE TEXT DOWN (Y=380 instead of 250)
     x_pos, y_pos = 50, 380 
-    
-    # Draw Header with Drop Shadow (Black shadow offset by 5px)
     draw.text((x_pos+5, y_pos+5), header, font=f_h, fill="black", stroke_width=10, stroke_fill="black")
     draw.text((x_pos, y_pos), header, font=f_h, fill="yellow", stroke_width=10, stroke_fill="black")
     
-    # Draw Subheader with Drop Shadow
     sub_y = y_pos + 160
     draw.text((x_pos+3, sub_y+3), subheader, font=f_s, fill="black", stroke_width=6, stroke_fill="black")
     draw.text((x_pos, sub_y), subheader, font=f_s, fill="white", stroke_width=6, stroke_fill="black")
