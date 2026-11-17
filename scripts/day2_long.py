@@ -72,7 +72,12 @@ if len(sentences) < 10:
 print(f"Script generated ({len(sentences)} sentences).")
 
 print("Director AI planning timeline...")
-director_prompt = f"You are a video director. Assign 'ai_image', 'stock_video', or 'unsplash' to each sentence. Return ONLY JSON array: [{{\"media\": \"ai_image\", \"prompt\": \"...\"}}]\nSentences: {json.dumps(sentences)}"
+director_prompt = f"""
+You are a master video director. For each of the following sentences, assign a media type ('ai_image', 'stock_video', or 'unsplash') and a unique, highly descriptive visual prompt (4-8 words). 
+Do NOT use generic words like 'space' or 'galaxy'. Be specific (e.g., 'close up of a dying red star', 'ancient stone observatory in the dark', 'scientist looking at glowing computer screens').
+Return ONLY a valid JSON array: [{{"media": "ai_image", "prompt": "..."}}]
+Sentences: {json.dumps(sentences)}
+"""
 director_raw = llm(director_prompt, temp=0.6)
 director_raw = re.sub(r"^```(?:json)?", "", director_raw).strip(); director_raw = re.sub(r"```$", "", director_raw).strip()
 m = re.search(r"\[[\s\S]*\]", director_raw)
@@ -80,7 +85,7 @@ timeline = json.loads(m.group()) if m else [{"media": "stock_video", "prompt": "
 
 def generate_thumbnail():
     print("Generating Catchy Thumbnail...")
-    text_prompt = f"Generate JSON with 'header' (2-4 ALL CAPS words) and 'subheader' (4-7 words) for a video about {TOPIC}. Return ONLY JSON."
+    text_prompt = f"Generate JSON with 'header' (2-4 ALL CAPS clickbait words) and 'subheader' (4-7 words) for a video about {TOPIC}. Return ONLY JSON."
     text_raw = llm(text_prompt, temp=0.9)
     text_raw = re.sub(r"^```(?:json)?", "", text_raw).strip(); text_raw = re.sub(r"```$", "", text_raw).strip()
     tm = re.search(r"\{[\s\S]*\}", text_raw)
@@ -91,7 +96,6 @@ def generate_thumbnail():
     except: header, subheader = "MIND BLOWN", "You won't believe this..."
     
     bg_img = None
-    # Add random seed to thumbnail to avoid same image
     url = f"https://image.pollinations.ai/prompt/{quote(TOPIC + ', cinematic, dramatic lighting, 8k')}?width=1280&height=720&nologo=true&token={POLLINATIONS_KEY}&seed={random.randint(1,999999)}"
     try:
         r = requests.get(url, timeout=45)
@@ -155,9 +159,7 @@ def dur(path):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path], stdout=subprocess.PIPE, text=True)
     return float(r.stdout.strip())
 
-# --- FIXED FETCHERS (RANDOM SELECTION & SEEDS) ---
 def fetch_ai_image(prompt, out):
-    # Added random seed so AI generates a unique image every time
     seed = random.randint(1, 999999)
     url = f"https://image.pollinations.ai/prompt/{quote(prompt + ', 8k, cinematic')}?width=1920&height=1080&nologo=true&token={POLLINATIONS_KEY}&seed={seed}"
     try:
@@ -173,18 +175,15 @@ def fetch_stock_video(q, out):
             r = requests.get(f"https://api.pexels.com/videos/search?query={quote(q)}&orientation=landscape&per_page=10", headers={"Authorization": key}, timeout=15)
             v = r.json().get("videos", [])
             if v:
-                # Pick a RANDOM video from the top 10
                 chosen = random.choice(v[:10])
                 with open(out, "wb") as f: f.write(requests.get(sorted(chosen["video_files"], key=lambda x: x.get("width", 0), reverse=True)[0]["link"], timeout=40).content)
                 return True
         except Exception: continue
     
-    # Try Pixabay
     try:
         r = requests.get(f"https://pixabay.com/api/videos/?key={PIXABAY_KEY}&q={quote(q)}&per_page=10", timeout=15)
         h = r.json().get("hits", [])
         if h:
-            # Pick a RANDOM video from the top 10
             chosen = random.choice(h[:10])
             url = chosen["videos"].get("medium", {}).get("url") or chosen["videos"]["small"]["url"]
             with open(out, "wb") as f: f.write(requests.get(url, timeout=40).content)
@@ -197,7 +196,6 @@ def fetch_unsplash_image(q, out):
         r = requests.get("https://api.unsplash.com/search/photos", params={"query": q, "orientation": "landscape", "per_page": 10}, headers={"Authorization": f"Client-ID {UNSPLASH_KEY}"}, timeout=15)
         results = r.json().get("results", [])
         if results:
-            # Pick a RANDOM image from the top 10
             chosen = random.choice(results[:10])
             with open(out, "wb") as f: f.write(requests.get(chosen["urls"]["full"], timeout=40).content)
             return True

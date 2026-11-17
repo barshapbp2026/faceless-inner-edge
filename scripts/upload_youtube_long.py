@@ -4,10 +4,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-SCOPES = [
-    "https://www.googleapis.com/auth/youtube.upload",
-    "https://www.googleapis.com/auth/youtube"
-]
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
 VIDEO_FILE = "output/final_video_subbed.mp4"
 CATEGORY_ID = "28"
 
@@ -34,7 +31,6 @@ def get_authenticated_service():
     return build("youtube", "v3", credentials=creds)
 
 def upload_video(youtube):
-    # CHANGED TO PUBLIC HERE
     body = {"snippet": {"title": TITLE, "description": DESCRIPTION, "tags": TAGS, "categoryId": CATEGORY_ID}, "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}
     media = MediaFileUpload(VIDEO_FILE, chunksize=-1, resumable=True, mimetype="video/mp4")
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)

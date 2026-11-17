@@ -7,10 +7,9 @@ VIDEO_IN = "output/final_video.mp4"
 VIDEO_OUT = "output/final_video_subbed.mp4"
 
 if not os.path.exists(VIDEO_IN):
-    print(f"ERROR: {VIDEO_IN} not found. The video generation failed.")
+    print(f"ERROR: {VIDEO_IN} not found.")
     sys.exit(1)
 
-# Detect if this is a Short or Long video
 duration_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", VIDEO_IN]
 duration_str = subprocess.run(duration_cmd, stdout=subprocess.PIPE, text=True).stdout.strip()
 try:

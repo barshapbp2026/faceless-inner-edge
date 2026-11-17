@@ -1,4 +1,4 @@
-import os, time, requests
+import os, time, requests, json
 from dotenv import load_dotenv
 import cloudinary
 import cloudinary.uploader
@@ -15,39 +15,37 @@ cloudinary.config(
 IG_USER_ID = os.getenv("IG_BUSINESS_ACCOUNT_ID")
 IG_ACCESS_TOKEN = os.getenv("IG_ACCESS_TOKEN")
 VIDEO_FILE = "output/final_video_subbed.mp4"
-CAPTION = "The mystery of dark matter, explained in 60 seconds. #space #science #reels #darkmatter"
+
+if os.path.exists("output/topic.json"):
+    with open("output/topic.json", "r") as f: 
+        topic_data = json.load(f)
+    TITLE = topic_data.get("video_title", "Space Mystery")
+    DESCRIPTION = topic_data.get("description", "")
+    TAGS = " ".join(topic_data.get("tags", ["#space", "#science", "#reels"]))
+    CAPTION = f"{TITLE}\n\n{DESCRIPTION}\n\n{TAGS}"
+else:
+    CAPTION = "Space Mystery\n\n#space #science #reels"
 
 def upload_to_cloudinary(filepath):
     print("Uploading video to Cloudinary...")
     try:
-        response = cloudinary.uploader.upload(
-            filepath,
-            resource_type="video",
-            folder="instagram_reels"
-        )
-        public_url = response['secure_url']
-        print("Cloudinary URL: " + public_url)
-        return public_url
+        response = cloudinary.uploader.upload(filepath, resource_type="video", folder="instagram_reels")
+        print("Cloudinary URL: " + response['secure_url'])
+        return response['secure_url']
     except Exception as e:
-        print("ERROR uploading to Cloudinary: " + str(e))
+        print("ERROR uploading: " + str(e))
         return None
 
 def create_container(video_url):
     print("Creating Instagram media container...")
     r = requests.post(
         "https://graph.instagram.com/v26.0/" + IG_USER_ID + "/media",
-        params={
-            "media_type": "REELS",
-            "video_url": video_url,
-            "caption": CAPTION,
-            "access_token": IG_ACCESS_TOKEN,
-        },
+        params={"media_type": "REELS", "video_url": video_url, "caption": CAPTION, "access_token": IG_ACCESS_TOKEN},
     )
     data = r.json()
     if "id" not in data:
         print("ERROR creating container:", data)
         return None
-    print("Container ID: " + data["id"])
     return data["id"]
 
 def wait_for_ready(container_id):
@@ -58,15 +56,10 @@ def wait_for_ready(container_id):
             "https://graph.instagram.com/v26.0/" + container_id,
             params={"fields": "status_code,status", "access_token": IG_ACCESS_TOKEN},
         )
-        data = r.json()
-        status = data.get("status_code")
+        status = r.json().get("status_code")
         print("  [" + str(i+1) + "/30] Status: " + str(status))
-        if status == "FINISHED":
-            return True
-        if status == "ERROR":
-            print("ERROR processing video:", data)
-            return False
-    print("TIMEOUT")
+        if status == "FINISHED": return True
+        if status == "ERROR": return False
     return False
 
 def publish_reel(container_id):
@@ -76,20 +69,14 @@ def publish_reel(container_id):
         params={"creation_id": container_id, "access_token": IG_ACCESS_TOKEN},
     )
     data = r.json()
-    if "id" not in data:
+    if "id" in data:
+        print("\n✅ Published! Post ID: " + data["id"])
+    else:
         print("ERROR publishing:", data)
-        return
-    print("")
-    print("Published! Post ID: " + data["id"])
-    print("Check your Instagram profile: @inneredgemind2026")
 
 if __name__ == "__main__":
     video_url = upload_to_cloudinary(VIDEO_FILE)
-    if not video_url:
-        exit(1)
-    container_id = create_container(video_url)
-    if not container_id:
-        exit(1)
-    if wait_for_ready(container_id):
-        publish_reel(container_id)
-
+    if video_url:
+        container_id = create_container(video_url)
+        if container_id and wait_for_ready(container_id):
+            publish_reel(container_id)
