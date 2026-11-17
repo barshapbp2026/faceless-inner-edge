@@ -44,25 +44,37 @@ def llm(prompt, temp=0.7):
         except Exception: continue
     raise Exception("All LLM keys failed.")
 
+# --- BULLETPROOF TEXT CLEANER ---
 def clean_text(text):
+    # Remove markdown symbols
     text = re.sub(r'\*+', '', text)
     text = re.sub(r'_+', '', text)
     text = re.sub(r'#+', '', text)
+    
+    # Remove structural labels (Hook, Context, Twist, Outro, Narrator, etc.)
+    # Matches things like "1. Hook: ", "Hook: ", "2. Context: ", etc.
+    text = re.sub(r'(?i)\b(?:Hook|Context|Escalation|Twist|Outro|Narrator|Scene|Narration|Speaker|Host)\s*:\s*', '', text)
+    
+    # Remove leading numbers like "1. ", "2. "
+    text = re.sub(r'\b\d+\.\s*', '', text)
+    
+    # Remove quotes
     text = text.replace('"', '').replace("'", "")
+    
+    # Clean up extra spaces
+    text = re.sub(r'\s+', ' ', text)
+    
     return text.strip()
 
 print("Generating Master Short script...")
+# We updated the prompt to forbid labels and numbers
 master_short_prompt = f"""
 You are a master viral storyteller. Write a 60-second script about {TOPIC}.
-You must use EXACTLY 4 sentences following this arc:
-1. Hook: A shocking question or mind-bending statement.
-2. Context: The strange reality or mystery.
-3. Twist: The most mind-blowing revelation.
-4. Outro: A lingering philosophical question.
-CRITICAL: Output ONLY the 4 sentences. Do NOT use asterisks, symbols, or markdown.
+Follow this narrative arc: Hook, Context, Twist, Outro.
+CRITICAL RULE: Output ONLY the sentences. Do NOT include the words Hook, Context, Twist, or Outro. Do NOT number the sentences. Just output the pure story text.
 """
 script = llm(master_short_prompt, temp=0.7).strip()
-script = clean_text(script)
+script = clean_text(script) # Apply cleaner
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', script) if s.strip()]
 print(f"Script:\n{script}\n")
 
@@ -79,7 +91,8 @@ async def make_voices():
         success = False
         for attempt in range(3):
             try:
-                await edge_tts.Communicate(s, "en-US-GuyNeural").save(f"output/voice_{i}.mp3")
+                # Using en-US-ChristopherNeural for a deeper voice
+                await edge_tts.Communicate(s, "en-US-ChristopherNeural").save(f"output/voice_{i}.mp3")
                 success = True
                 break
             except Exception as e:
