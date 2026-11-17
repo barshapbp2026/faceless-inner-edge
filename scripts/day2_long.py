@@ -40,14 +40,17 @@ def clean_text(text):
     text = re.sub(r'\*+', '', text)
     text = re.sub(r'_+', '', text)
     text = re.sub(r'#+', '', text)
+    text = re.sub(r'(?i)\b(?:Hook|Context|Escalation|Twist|Outro|Narrator|Scene|Narration|Speaker|Host)\s*:\s*', '', text)
+    text = re.sub(r'\b\d+\.\s*', '', text)
     text = text.replace('"', '').replace("'", "")
+    text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
 print("Generating 5-minute script...")
 master_long_prompt = f"""
 You are a master documentary filmmaker. Write a detailed, 700-word script about {TOPIC}.
 Follow this arc: Hook, Context, Escalation, Twist, Outro.
-CRITICAL: Output ONLY the raw script text. Do NOT use any markdown formatting, asterisks, or symbols.
+CRITICAL RULE: Output ONLY the raw script text. Do NOT include the words Hook, Context, Escalation, Twist, or Outro. Do NOT use any markdown formatting, asterisks, or numbers.
 """
 script = llm(master_long_prompt, temp=0.7).strip()
 script = clean_text(script)
@@ -74,14 +77,20 @@ print(f"Script generated ({len(sentences)} sentences).")
 print("Director AI planning timeline...")
 director_prompt = f"""
 You are a master video director. For each of the following sentences, assign a media type ('ai_image', 'stock_video', or 'unsplash') and a unique, highly descriptive visual prompt (4-8 words). 
-Do NOT use generic words like 'space' or 'galaxy'. Be specific (e.g., 'close up of a dying red star', 'ancient stone observatory in the dark', 'scientist looking at glowing computer screens').
+Do NOT use generic words like 'space' or 'galaxy'. Be specific.
 Return ONLY a valid JSON array: [{{"media": "ai_image", "prompt": "..."}}]
 Sentences: {json.dumps(sentences)}
 """
 director_raw = llm(director_prompt, temp=0.6)
 director_raw = re.sub(r"^```(?:json)?", "", director_raw).strip(); director_raw = re.sub(r"```$", "", director_raw).strip()
 m = re.search(r"\[[\s\S]*\]", director_raw)
-timeline = json.loads(m.group()) if m else [{"media": "stock_video", "prompt": "space"} for _ in sentences]
+
+# --- FIX: IF DIRECTOR FAILS, USE RANDOM UNIQUE PROMPTS INSTEAD OF "space" ---
+if m:
+    timeline = json.loads(m.group())
+else:
+    fallback_prompts = ["glowing nebula", "distant galaxy", "black hole accretion", "quantum particles", "ancient star map", "deep space telescope", "cosmic void", "supernova explosion", "astronaut floating", "dark matter simulation"]
+    timeline = [{"media": random.choice(["ai_image", "unsplash", "stock_video"]), "prompt": random.choice(fallback_prompts)} for _ in sentences]
 
 def generate_thumbnail():
     print("Generating Catchy Thumbnail...")
@@ -145,7 +154,7 @@ async def make_voices():
         success = False
         for attempt in range(3):
             try:
-                await edge_tts.Communicate(s, "en-US-GuyNeural").save(f"output/long_voice_{i}.mp3")
+                await edge_tts.Communicate(s, "en-US-ChristopherNeural").save(f"output/long_voice_{i}.mp3")
                 success = True; break
             except Exception: await asyncio.sleep(2)
         if not success:
@@ -233,9 +242,11 @@ for i, sentence in enumerate(sentences):
     elif media == "stock_video" and fetch_stock_video(prompt, raw_v): process_vid(raw_v, out, d); success = True
 
     if not success:
+        # Randomize the fallback search term to prevent identical visuals
+        fallback_query = random.choice(["galaxy", "nebula", "cosmos", "universe", "stars", "astronomy"])
         if fetch_ai_image(prompt, raw_i): process_img(raw_i, out, d, "in"); success = True
         elif fetch_unsplash_image(prompt, raw_i): process_img(raw_i, out, d, "out"); success = True
-        elif fetch_stock_video(prompt, raw_v): process_vid(raw_v, out, d); success = True
+        elif fetch_stock_video(fallback_query, raw_v): process_vid(raw_v, out, d); success = True
 
     if not success:
         subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s=1920x1080:d={d}", "-c:v", "libx264", "-t", str(d), out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

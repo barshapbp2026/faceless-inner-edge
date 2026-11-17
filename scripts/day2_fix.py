@@ -44,45 +44,39 @@ def llm(prompt, temp=0.7):
         except Exception: continue
     raise Exception("All LLM keys failed.")
 
-# --- BULLETPROOF TEXT CLEANER ---
 def clean_text(text):
-    # Remove markdown symbols
     text = re.sub(r'\*+', '', text)
     text = re.sub(r'_+', '', text)
     text = re.sub(r'#+', '', text)
-    
-    # Remove structural labels (Hook, Context, Twist, Outro, Narrator, etc.)
-    # Matches things like "1. Hook: ", "Hook: ", "2. Context: ", etc.
     text = re.sub(r'(?i)\b(?:Hook|Context|Escalation|Twist|Outro|Narrator|Scene|Narration|Speaker|Host)\s*:\s*', '', text)
-    
-    # Remove leading numbers like "1. ", "2. "
     text = re.sub(r'\b\d+\.\s*', '', text)
-    
-    # Remove quotes
     text = text.replace('"', '').replace("'", "")
-    
-    # Clean up extra spaces
     text = re.sub(r'\s+', ' ', text)
-    
     return text.strip()
 
 print("Generating Master Short script...")
-# We updated the prompt to forbid labels and numbers
 master_short_prompt = f"""
 You are a master viral storyteller. Write a 60-second script about {TOPIC}.
 Follow this narrative arc: Hook, Context, Twist, Outro.
 CRITICAL RULE: Output ONLY the sentences. Do NOT include the words Hook, Context, Twist, or Outro. Do NOT number the sentences. Just output the pure story text.
 """
 script = llm(master_short_prompt, temp=0.7).strip()
-script = clean_text(script) # Apply cleaner
+script = clean_text(script)
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', script) if s.strip()]
 print(f"Script:\n{script}\n")
 
 print("Extracting visual keywords...")
 kw = llm("For each sentence, output 2-3 visual keywords.\n\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(sentences)) + '\n\nReturn ONLY a JSON array: ["kw1","kw2","kw3","kw4"]', temp=0.4)
 kw = re.sub(r"^```(?:json)?", "", kw).strip(); kw = re.sub(r"```$", "", kw).strip()
-m = re.search(r"\[[\s\S]*\]", kw); keywords = json.loads(m.group()) if m else ["space"] * len(sentences)
-while len(keywords) < len(sentences): keywords.append("space")
+m = re.search(r"\[[\s\S]*\]", kw)
+
+# --- FIX: IF KEYWORDS FAIL, USE RANDOM UNIQUE PROMPTS ---
+if m:
+    keywords = json.loads(m.group())
+else:
+    fallback_kws = ["galaxy", "nebula", "black hole", "quantum physics", "telescope", "cosmos"]
+    keywords = [random.choice(fallback_kws) for _ in sentences]
+while len(keywords) < len(sentences): keywords.append(random.choice(fallback_kws))
 
 print("Generating voiceovers...")
 async def make_voices():
@@ -91,7 +85,6 @@ async def make_voices():
         success = False
         for attempt in range(3):
             try:
-                # Using en-US-ChristopherNeural for a deeper voice
                 await edge_tts.Communicate(s, "en-US-ChristopherNeural").save(f"output/voice_{i}.mp3")
                 success = True
                 break
@@ -170,7 +163,8 @@ for i, sentence in enumerate(sentences):
         elif pixabay_video(q, f"assets/raw_{i}.mp4"): video_to_duration(f"assets/raw_{i}.mp4", out, d); ok = True
 
     if not ok:
-        pexels_video("space", f"assets/raw_{i}.mp4")
+        fallback_q = random.choice(["galaxy", "nebula", "cosmos", "stars"])
+        pexels_video(fallback_q, f"assets/raw_{i}.mp4")
         video_to_duration(f"assets/raw_{i}.mp4", out, d)
     segs.append((out, v))
 
